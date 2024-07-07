@@ -1,0 +1,12 @@
+/**
+ * Daily Checklist Settings File
+ * 
+ * Copy and paste this file, and rename it to `daily-checklist-settings.js` so you can change what your daily to-dos will be.
+ * 
+ * Limitations: There are no nested tasks. This is not meant to be a replacement for a proper to-do app. Just some tasks you may want to include in a "daily" browser bookmark folder.
+*/
+
+const todoList = [
+    "Task 1",
+    "Task 2",
+]
