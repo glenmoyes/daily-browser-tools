@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>To-do List Splitter</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue",
+          sans-serif;
+      }
+      h1,
+      p {
+        text-align: center;
+      }
+      label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 0.25em;
+      }
+      button {
+        display: block;
+        padding: 1rem;
+        font-weight: bold;
+        text-transform: uppercase;
+        width: calc(100% - 20px);
+        background-color: #4a3f90;
+        color: #fff;
+        font-size: 1.5em;
+      }
+      button:hover {
+        background-color: rgb(94, 84, 161);
+        cursor: pointer;
+      }
+      .column {
+        float: left;
+        width: 50%;
+        margin-top: 1rem;
+      }
+      textarea {
+        width: calc(100% - 20px);
+        height: calc(50vh - 150px);
+      }
+    </style>
+  </head>
+
+  <body>
+    <h1>To-do List Splitter</h1>
+    <p>
+      Copy and paste your to-do list here to separate your completed items from
+      your done items.
+    </p>
+
+    <label for="todos">Paste your markdown-formatted to-do list</label>
+    <textarea
+      name="todos"
+      id="todos"
+      rows="20"
+      style="background-color: rgb(232, 216, 255)"
+    ></textarea>
+
+    <button type="button" it="split" onclick="splitTodos(todos.value)">
+      Split
+    </button>
+
+    <div class="column">
+      <label for="todosComplete">Completed to-dos</label>
+      <textarea
+        name="todosComplete"
+        id="todosComplete"
+        rows="20"
+        style="background-color: rgb(237, 255, 224)"
+      ></textarea>
+    </div>
+
+    <div class="column">
+      <label for="todosPending">Pending to-dos</label>
+      <textarea
+        name="todosPending"
+        id="todosPending"
+        rows="20"
+        style="background-color: rgb(255, 250, 223)"
+      ></textarea>
+    </div>
+
+    <script>
+      const todosTextarea = document.querySelector("#todos");
+      const completedTodoTextarea = document.querySelector("#todosComplete");
+      const pendingTodoTextarea = document.querySelector("#todosPending");
+
+      // turn a markdown-formatted string into a JSON object
+      function splitTodos(markdown) {
+        let todoArray = createTodoArray(markdown);
+
+        /* ===== Create COMPLETED lists ===== */
+
+        let completedTodos = JSON.parse(JSON.stringify(todoArray));
+
+        for (
+          let lineNumber = 0;
+          lineNumber < completedTodos.length;
+          lineNumber++
+        ) {
+          switch (completedTodos[lineNumber].type) {
+            case "header":
+              completedTodos[lineNumber].print = true;
+              break;
+
+            case "space":
+              completedTodos[lineNumber].print = true;
+              break;
+
+            case "completed":
+              completedTodos[lineNumber].print = true;
+              break;
+
+            case "pending":
+              if (hasCompletedChildren(lineNumber, completedTodos)) {
+                // make it a note
+                const pendingRegex = /- \[[^x]\] /;
+                completedTodos[lineNumber].content = completedTodos[
+                  lineNumber
+                ].content.replace(pendingRegex, "- ");
+                // and display it
+                completedTodos[lineNumber].print = true;
+              }
+              break;
+
+            case "note":
+              if (hasCompletedParent(lineNumber, completedTodos)) {
+                completedTodos[lineNumber].print = true;
+              }
+              // TODO: Notes need to be aware of they are a child of a pending/completed task
+              break;
+          }
+        }
+
+        // DEBUG
+        console.log("completedTodos:");
+        console.log(completedTodos);
+        console.log(" ");
+
+        /* ===== Create PENDING lists ===== */
+
+        let pendingTodos = JSON.parse(JSON.stringify(todoArray));
+
+        for (
+          let lineNumber = 0;
+          lineNumber < pendingTodos.length;
+          lineNumber++
+        ) {
+          switch (pendingTodos[lineNumber].type) {
+            case "header":
+              pendingTodos[lineNumber].print = true;
+              break;
+
+            case "space":
+              pendingTodos[lineNumber].print = true;
+              break;
+
+            case "completed":
+              if (hasChildren(lineNumber, pendingTodos)) {
+                // completed task has children
+                if (hasPendingChildren(lineNumber, pendingTodos)) {
+                  // and it has a child that in pending
+                  // we have to show it as a note (but still remember it as a task)
+                  pendingTodos[lineNumber].content = pendingTodos[
+                    lineNumber
+                  ].content.replace("- [x] ", "- ");
+                  // and display it
+                  pendingTodos[lineNumber].print = true;
+                }
+              }
+              break;
+
+            case "pending":
+              pendingTodos[lineNumber].print = true;
+              break;
+
+            case "note":
+              // TODO: by default, assume all notes go into the pending textarea, since the completed textarea will only show notes if they are the child of a completed task
+              // TODO: Detect if this note are associated with tasks that are pending or completed. This has to be done by either parent or proximity.
+              pendingTodos[lineNumber].print = true;
+              break;
+          }
+        }
+
+        // DEBUG
+        console.log("pendingTodos:");
+        console.log(pendingTodos);
+        console.log(" ");
+
+        // write completed list to textarea
+        completedTodoTextarea.value = "";
+        let lastCompletedTodoLine = null;
+        for (const line of completedTodos) {
+          if (line.print === true) {
+            if (!(line.content === "" && lastCompletedTodoLine === "")) {
+              completedTodoTextarea.value += line.content + "\n";
+            }
+            lastCompletedTodoLine = line.content;
+          }
+        }
+
+        let lastPendingTodoLine = null;
+        // write pending list to textarea
+        pendingTodoTextarea.value = "";
+        for (const line of pendingTodos) {
+          if (line.print === true) {
+            if (line.print === true) {
+              if (!(line.content === "" && lastPendingTodoLine === "")) {
+                pendingTodoTextarea.value += line.content + "\n";
+              }
+              lastPendingTodoLine = line.content;
+            }
+          }
+        }
+
+        // DEBUG
+        console.log("----- DONE -----");
+        console.log(" ");
+      }
+
+      /* ===== Helper Functions ===== */
+
+      function createTodoArray(markdown) {
+        let todoArray = [];
+
+        const lines = markdown.split("\n");
+
+        for (const line of lines) {
+          // Set indent level for line. This determines parent/child relationship of tasks.
+          let lineIndentLevel = 0;
+          for (const char of line) {
+            if (char === "\t") {
+              lineIndentLevel++;
+            } else {
+              break;
+            }
+          }
+
+          // Set line type: header, completed task, pending task, etc.
+          let lineType = "";
+          if (line.startsWith("#")) {
+            lineType = "header";
+          } else if (line === "") {
+            lineType = "space";
+          } else if (line.includes("- [x]")) {
+            lineType = "completed";
+          } else if (line.includes("- [")) {
+            lineType = "pending";
+          } else {
+            lineType = "note";
+          }
+
+          // add line to the list
+          todoArray.push({
+            type: lineType,
+            indentLevel: lineIndentLevel,
+            print: false,
+            content: line,
+          });
+        }
+
+        // debug
+        console.log("todoArray: ");
+        console.log(todoArray);
+        console.log(" ");
+
+        return todoArray;
+      }
+
+      function hasChildren(parent, taskArray) {
+        for (let i = parent + 1; i < taskArray.length; i++) {
+          if (taskArray[i].indentLevel > taskArray[parent].indentLevel) {
+            // Index is higher. That means this line is a child.
+            return true;
+          } else {
+            // We've hit a sibling. There are no more children.
+            return false;
+          }
+        }
+        // We've hit the last line.
+        return false;
+      }
+
+      function hasPendingChildren(parent, taskArray) {
+        for (let i = parent + 1; i < taskArray.length; i++) {
+          if (taskArray[i].indentLevel > taskArray[parent].indentLevel) {
+            // Index is higher. That means this line is a child.
+            // lets check if the line is unfinished.
+            if (taskArray[i].type === "pending") {
+              return true;
+            } else {
+              return false;
+            }
+          } else {
+            // We've hit a sibling. There are no more children.
+            return false;
+          }
+        }
+        // We've hit the last line.
+        return false;
+      }
+
+      function hasCompletedChildren(parent, taskArray) {
+        for (let i = parent + 1; i < taskArray.length; i++) {
+          if (taskArray[i].indentLevel > taskArray[parent].indentLevel) {
+            // Index is higher. That means this line is a child.
+            // check if the line is unfinished.
+            if (taskArray[i].type === "completed") {
+              return true;
+            }
+          } else {
+            // We've hit a sibling. There are no more children. Stop looking.
+            return false;
+          }
+        }
+        // We've hit the last line.
+        return false;
+      }
+
+      function hasParent(child, taskArray) {
+        if (taskArray[child].indentLevel <= 0) {
+          // It's not indented. So there's no way this line has a parent.
+          return false;
+        }
+        for (let i = child - 1; i >= 0; i--) {
+          if (taskArray[i].indentLevel < taskArray[child].indentLevel) {
+            // Index is lower. That means this line is a parent.
+            return true;
+          } else {
+            // We've hit a sibling. Keep looking at the next previous line.
+          }
+        }
+        // We've hit the first line.
+        return false;
+      }
+
+      function hasCompletedParent(child, taskArray) {
+        if (taskArray[child].indentLevel <= 0) {
+          // It's not indented. So there's no way this line has a parent.
+          return false;
+        }
+        for (let i = child - 1; i >= 0; i--) {
+          if (taskArray[i].indentLevel < taskArray[child].indentLevel) {
+            // Index is lower. That means this line is a parent.
+            if (taskArray[i].type === "completed") {
+              return true;
+            } else {
+              return false;
+            }
+          } else {
+            // We've hit a sibling. Keep looking at the next previous line.
+          }
+        }
+        // We've hit the first line.
+        return false;
+      }
+
+      function hasPendingParent(child, taskArray) {
+        if (taskArray[child].indentLevel <= 0) {
+          // It's not indented. So there's no way this line has a parent.
+          return false;
+        }
+        for (let i = child - 1; i >= 0; i--) {
+          if (taskArray[i].indentLevel < taskArray[child].indentLevel) {
+            // Index is lower. That means this line is a parent.
+            if (taskArray[i].type === "pending") {
+              return true;
+            } else {
+              return false;
+            }
+          } else {
+            // We've hit a sibling. Keep looking at the next previous line.
+          }
+        }
+        // We've hit the first line.
+        return false;
+      }
+    </script>
+  </body>
+</html>
