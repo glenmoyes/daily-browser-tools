@@ -52,7 +52,7 @@
       your done items.
     </p>
 
-    <label for="todos">Paste your markdown-formatted to-do list</label>
+    <label for="todos">Paste your markdown-formatted to-do list here:</label>
     <textarea
       name="todos"
       id="todos"
@@ -65,7 +65,7 @@
     </button>
 
     <div class="column">
-      <label for="todosComplete">Completed to-dos</label>
+      <label for="todosComplete">Completed to-do's:</label>
       <textarea
         name="todosComplete"
         id="todosComplete"
@@ -75,7 +75,7 @@
     </div>
 
     <div class="column">
-      <label for="todosPending">Pending to-dos</label>
+      <label for="todosPending">Pending to-do's:</label>
       <textarea
         name="todosPending"
         id="todosPending"
@@ -95,7 +95,7 @@
 
         /* ===== Create COMPLETED lists ===== */
 
-        let completedTodos = JSON.parse(JSON.stringify(todoArray));
+        let completedTodos = JSON.parse(JSON.stringify(todoArray)); // deep copy
 
         for (
           let lineNumber = 0;
@@ -131,7 +131,9 @@
               if (hasCompletedParent(lineNumber, completedTodos)) {
                 completedTodos[lineNumber].print = true;
               }
-              // TODO: Notes need to be aware of they are a child of a pending/completed task
+              if (completedTodos[lineNumber].indentLevel === 0) {
+                completedTodos[lineNumber].print = true;
+              }
               break;
           }
         }
@@ -143,7 +145,7 @@
 
         /* ===== Create PENDING lists ===== */
 
-        let pendingTodos = JSON.parse(JSON.stringify(todoArray));
+        let pendingTodos = JSON.parse(JSON.stringify(todoArray)); // deep copy
 
         for (
           let lineNumber = 0;
@@ -160,17 +162,12 @@
               break;
 
             case "completed":
-              if (hasChildren(lineNumber, pendingTodos)) {
-                // completed task has children
-                if (hasPendingChildren(lineNumber, pendingTodos)) {
-                  // and it has a child that in pending
-                  // we have to show it as a note (but still remember it as a task)
-                  pendingTodos[lineNumber].content = pendingTodos[
-                    lineNumber
-                  ].content.replace("- [x] ", "- ");
-                  // and display it
-                  pendingTodos[lineNumber].print = true;
-                }
+              if (hasPendingChildren(lineNumber, pendingTodos)) {
+                // show the completed task as a note instead so children have hierarchical context.
+                pendingTodos[lineNumber].content = pendingTodos[
+                  lineNumber
+                ].content.replace("- [x] ", "- ");
+                pendingTodos[lineNumber].print = true;
               }
               break;
 
@@ -179,23 +176,26 @@
               break;
 
             case "note":
-              // TODO: by default, assume all notes go into the pending textarea, since the completed textarea will only show notes if they are the child of a completed task
-              // TODO: Detect if this note are associated with tasks that are pending or completed. This has to be done by either parent or proximity.
-              pendingTodos[lineNumber].print = true;
+              if (!hasPendingParent(lineNumber, pendingTodos)) {
+                pendingTodos[lineNumber].print = false;
+              } else {
+                pendingTodos[lineNumber].print = true;
+              }
+              if (pendingTodos[lineNumber].indentLevel === 0) {
+                pendingTodos[lineNumber].print = true;
+              }
               break;
           }
         }
 
-        // DEBUG
-        console.log("pendingTodos:");
-        console.log(pendingTodos);
-        console.log(" ");
+        /* ===== Write completed list to textarea ===== */
 
         // write completed list to textarea
         completedTodoTextarea.value = "";
         let lastCompletedTodoLine = null;
         for (const line of completedTodos) {
           if (line.print === true) {
+            // check to make sure there are no duplicate blank lines
             if (!(line.content === "" && lastCompletedTodoLine === "")) {
               completedTodoTextarea.value += line.content + "\n";
             }
@@ -203,12 +203,13 @@
           }
         }
 
-        let lastPendingTodoLine = null;
         // write pending list to textarea
         pendingTodoTextarea.value = "";
+        let lastPendingTodoLine = null;
         for (const line of pendingTodos) {
           if (line.print === true) {
             if (line.print === true) {
+              // check to make sure there are no duplicate blank lines
               if (!(line.content === "" && lastPendingTodoLine === "")) {
                 pendingTodoTextarea.value += line.content + "\n";
               }
@@ -216,13 +217,9 @@
             }
           }
         }
-
-        // DEBUG
-        console.log("----- DONE -----");
-        console.log(" ");
       }
 
-      /* ===== Helper Functions ===== */
+      /* ===== Functions ===== */
 
       function createTodoArray(markdown) {
         let todoArray = [];
@@ -240,7 +237,7 @@
             }
           }
 
-          // Set line type: header, completed task, pending task, etc.
+          // Set line type: header, completed task, pending task, note, etc.
           let lineType = "";
           if (line.startsWith("#")) {
             lineType = "header";
@@ -254,7 +251,7 @@
             lineType = "note";
           }
 
-          // add line to the list
+          // add line to the array
           todoArray.push({
             type: lineType,
             indentLevel: lineIndentLevel,
@@ -263,18 +260,13 @@
           });
         }
 
-        // debug
-        console.log("todoArray: ");
-        console.log(todoArray);
-        console.log(" ");
-
         return todoArray;
       }
 
       function hasChildren(parent, taskArray) {
         for (let i = parent + 1; i < taskArray.length; i++) {
           if (taskArray[i].indentLevel > taskArray[parent].indentLevel) {
-            // Index is higher. That means this line is a child.
+            // Indent is higher. That means this line is a child.
             return true;
           } else {
             // We've hit a sibling. There are no more children.
@@ -288,13 +280,12 @@
       function hasPendingChildren(parent, taskArray) {
         for (let i = parent + 1; i < taskArray.length; i++) {
           if (taskArray[i].indentLevel > taskArray[parent].indentLevel) {
-            // Index is higher. That means this line is a child.
+            // Indent is higher. That means this line is a child.
             // lets check if the line is unfinished.
             if (taskArray[i].type === "pending") {
               return true;
-            } else {
-              return false;
             }
+            // else keep searching...
           } else {
             // We've hit a sibling. There are no more children.
             return false;
@@ -307,11 +298,12 @@
       function hasCompletedChildren(parent, taskArray) {
         for (let i = parent + 1; i < taskArray.length; i++) {
           if (taskArray[i].indentLevel > taskArray[parent].indentLevel) {
-            // Index is higher. That means this line is a child.
+            // Indent is higher. That means this line is a child.
             // check if the line is unfinished.
             if (taskArray[i].type === "completed") {
               return true;
             }
+            // else keep searching...
           } else {
             // We've hit a sibling. There are no more children. Stop looking.
             return false;
@@ -328,11 +320,10 @@
         }
         for (let i = child - 1; i >= 0; i--) {
           if (taskArray[i].indentLevel < taskArray[child].indentLevel) {
-            // Index is lower. That means this line is a parent.
+            // Indent is lower. That means this line is a parent.
             return true;
-          } else {
-            // We've hit a sibling. Keep looking at the next previous line.
           }
+          // Else we've hit a sibling. Keep looking at the next previous line.
         }
         // We've hit the first line.
         return false;
@@ -345,7 +336,7 @@
         }
         for (let i = child - 1; i >= 0; i--) {
           if (taskArray[i].indentLevel < taskArray[child].indentLevel) {
-            // Index is lower. That means this line is a parent.
+            // Indent is lower. That means this line is a parent.
             if (taskArray[i].type === "completed") {
               return true;
             } else {
@@ -366,7 +357,7 @@
         }
         for (let i = child - 1; i >= 0; i--) {
           if (taskArray[i].indentLevel < taskArray[child].indentLevel) {
-            // Index is lower. That means this line is a parent.
+            // Indent is lower. That means this line is a parent.
             if (taskArray[i].type === "pending") {
               return true;
             } else {
